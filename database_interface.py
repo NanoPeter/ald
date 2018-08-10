@@ -74,8 +74,6 @@ class DatabaseInterface:
         sql_str = sql_query.format(**args)
         cursor.execute(sql_str)
 
-        print('DEBUG', sql_str)
-
         name_list = [d[0] for d in cursor.description]
         list_of_lists = [list(row) for row in cursor.fetchall()]
         df = pd.DataFrame(list_of_lists, columns=name_list)
@@ -120,7 +118,6 @@ class DatabaseInterface:
 
 
     def _set(self, sql_query):
-        print('DEBUG', sql_query)
         cursor = self._connection.cursor()
         cursor.execute(sql_query)
         self._new_to_commit = True
