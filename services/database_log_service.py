@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from paho.mqtt.client import Client, MQTTMessage
 import os
+import signal
 import time
 from threading import Thread
 import json
@@ -11,7 +12,7 @@ from ald.database_interface import OpenDatabaseConnection, DatabaseInterface
 from queue import Queue
 
 
-DEBUG = True
+DEBUG = False
 DB_CREDENTIALS_PATH = "credentials.conf"
 
 
@@ -62,7 +63,18 @@ class FlowMessage(Message):
     def insert_into_db(self, database_connection: DatabaseInterface) -> None:
         database_connection.insert_flow(
             dateutil.parser.parse(self._timestamp), self._volume_flow, self._mass_flow,
-            self._pressure, self._setpoint, self._timestamp
+            self._pressure, self._setpoint, self._temperature
+        )
+
+class ValveMessage(Message):
+    def __init__(self, timestamp: datetime, name: str, state: bool) -> None:
+        self._timestamp = timestamp
+        self._name = name
+        self._state = state
+
+    def insert_into_db(self, database_connection: DatabaseInterface) -> None:
+        database_connection.insert_valves(
+            dateutil.parser.parse(self._timestamp), self._name, self._state
         )
         
 
@@ -100,9 +112,6 @@ class MQTTReceiver:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._client.loop_stop()
-        self._log_file_temp.close()
-        self._log_file_flow.close()
-        self._log_file_pressure.close()
         debug_print("Loop stopped.")
 
     def _on_connect(self, client: Client, userdata, flags, rc) -> None:
@@ -113,7 +122,10 @@ class MQTTReceiver:
         client.message_callback_add('ald/flow/state', self._on_flow_state)       
 
         client.subscribe("ald/pressure/main")
-        client.message_callback_add('ald/pressure/main', self._on_pressure_main) 
+        client.message_callback_add('ald/pressure/main', self._on_pressure_main)
+
+        client.subscribe("ald/io/state")
+        client.message_callback_add('ald/io/state', self._on_valves)
 
         debug_print("Connected.")
 
@@ -151,13 +163,25 @@ class MQTTReceiver:
         datetime = values[self.TEMP_MESSAGE_KEYS[2]]
 
         self._queue.put(SampleTemperatureMessage(temp, resistance, datetime))
+
+    def _on_valves(self, client: Client, userdata, message: MQTTMessage) -> None:
+        values = json.loads(message.payload.decode())
+        debug_print("Message received: {}".format(values))
+
+        
+        for valve_name, valve_data in values.items():
+            state = valve_data["state"]
+            datetime = valve_data["timestamp"]
+
+            self._queue.put(ValveMessage(datetime, valve_name, state))
+            
         
 
 
 class DatabaseWorker():
     """Move ALD log data items from a queue into an SQL database."""
 
-    COMMIT_FREQUENCY = timedelta(minutes=10)
+    COMMIT_FREQUENCY = timedelta(seconds=10)
 
     def __init__(self, queue: Queue, database_connection: DatabaseInterface) -> None:
         self._queue = queue
@@ -178,7 +202,8 @@ class DatabaseWorker():
         """Commit pending changes to the database."""
         self._db_connection.commit()
 
-        
+
+
 
 if __name__ == "__main__":
     data_queue = Queue()  # type: Queue[Message]
