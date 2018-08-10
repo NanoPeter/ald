@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import configparser
 from datetime import datetime, timedelta
+import dateutil.parser
 from paho.mqtt.client import Client, MQTTMessage
 import os
 import time
@@ -33,7 +34,7 @@ class SampleTemperatureMessage(Message):
 
     def insert_into_db(self, database_connection: DatabaseInterface) -> None:
         database_connection.insert_sample_temperature(
-            self._timestamp, self._resistance, self._temperature
+            dateutil.parser.parse(self._timestamp), self._resistance, self._temperature
         )
 
         
@@ -43,8 +44,8 @@ class PressureMessage(Message):
         self._pressure = pressure
 
     def insert_into_db(self, database_connection: DatabaseInterface) -> None:
-        database_connection.insert_pressure_temperature(
-            self._timestamp, self._pressure
+        database_connection.insert_pressure(
+            dateutil.parser.parse(self._timestamp), self._pressure
         )
 
         
@@ -60,7 +61,7 @@ class FlowMessage(Message):
 
     def insert_into_db(self, database_connection: DatabaseInterface) -> None:
         database_connection.insert_flow(
-            self._timestamp, self._volume_flow, self._mass_flow, self._pressure,
+            dateutil.parser.parse(self._timestamp), self._volume_flow, self._mass_flow,
             self._pressure, self._setpoint, self._timestamp
         )
         
