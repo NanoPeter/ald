@@ -1,6 +1,6 @@
 import MySQLdb
 import pandas as pd
-from time import time
+from time import time, sleep
 
 from datetime import datetime
 
@@ -121,7 +121,6 @@ class DatabaseInterface:
 
     def _set(self, sql_query):
         print('DEBUG', sql_query)
-
         cursor = self._connection.cursor()
         cursor.execute(sql_query)
         self._new_to_commit = True
