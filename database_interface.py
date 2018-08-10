@@ -120,12 +120,11 @@ class DatabaseInterface:
 
 
     def _set(self, sql_query):
+        print('DEBUG', sql_query)
+
         cursor = self._connection.cursor()
         cursor.execute(sql_query)
         self._new_to_commit = True
-
-        print('DEBUG', sql_query)
-
 
     def commit(self):
         if self._new_to_commit:
@@ -158,7 +157,13 @@ class OpenDatabaseConnection:
 if '__main__' == __name__:
     now = datetime(1, 1, 1)
 
-    with OpenDatabaseConnection() as db:
+    host = input("Database host name: ")
+    user = input("User name: ")
+    import getpass
+    passwd = getpass.getpass(prompt='Password: ')
+    database = input("Database name: ")
+
+    with OpenDatabaseConnection(host, user, passwd, database) as db:
         db.insert_flow()
         db.insert_pressure()
         db.insert_sample_temperature()
@@ -166,7 +171,7 @@ if '__main__' == __name__:
         db.insert_valves()
         db.insert_process_log()
 
-    with OpenDatabaseConnection() as db:
+    with OpenDatabaseConnection(host, user, passwd, database) as db:
         print(db.get_flow(now))
         print(db.get_pressure(now))
         print(db.get_sample_temperature(now))
