@@ -14,6 +14,24 @@ CREATE TABLE IF NOT EXISTS sample
     PRIMARY KEY (datetime)
 );
 
+CREATE TABLE IF NOT EXISTS control_loop
+(
+    loop_id TINYINT UNSIGNED,
+    short_name VARCHAR(32) NOT NULL,
+    full_name VARCHAR(64),
+    PRIMARY KEY (loop_id)
+);
+
+INSERT INTO control_loop (loop_id, short_name, full_name) VALUES 
+    (0, "leftlinevacuum", "Left Line (vacuum)"),
+    (1, "centerlinevacuum", "Center Line (vacuum)"),
+    (2, "copperheater", "Copper Header"),
+    (3, "rightlinevacuum", "Right Line (vacuum)"),
+    (4, "leftprecursor", "Left Precursor"),
+    (5, "leftlineair", "Left Line (air)"),
+    (6, "rightlineair", "Right Line (air)"),
+    (7, "rightprecursor", "Right Precursor");
+
 CREATE TABLE IF NOT EXISTS temperature 
 (
     datetime DATETIME(3),
@@ -22,6 +40,8 @@ CREATE TABLE IF NOT EXISTS temperature
     working_set_point FLOAT,
     target_set_point FLOAT,
     output_power FLOAT,
+    CONSTRAINT fk_loopinfo FOREIGN KEY (loop_id) REFERENCES control_loop (loop_id) 
+        ON DELETE CASCADE ON UPDATE RESTRICT,
     PRIMARY KEY (datetime, loop_id)
 );
 
