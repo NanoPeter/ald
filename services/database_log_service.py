@@ -12,7 +12,7 @@ from ald.database_interface import OpenDatabaseConnection, DatabaseInterface
 from queue import Queue
 
 
-DEBUG = False
+DEBUG = True
 DB_CREDENTIALS_PATH = "credentials.conf"
 
 
@@ -76,7 +76,21 @@ class ValveMessage(Message):
         database_connection.insert_valves(
             dateutil.parser.parse(self._timestamp), self._name, self._state
         )
-        
+
+class TemperatureMessage(Message):
+    def __init__(self, loop_id: int, datetime: datetime, temperature: float, wsp: float, tsp: float, power: float) -> None:
+        self._loop_id = loop_id
+        self._datetime = datetime
+        self._temperature = temperature
+        self._wsp, self._tsp = wsp, tsp
+        self._power = power
+
+    def insert_into_db(self, database_connection: DatabaseInterface) -> None:
+        database_connection.insert_temperature(
+            dateutil.parser.parse(self._datetime), self._loop_id, self._temperature,
+            self._wsp, self._tsp, self._power
+        )
+
 
 class MQTTReceiver:
     """Asynchronously put ALD log data received via MQTT into a queue for processing.
@@ -89,9 +103,13 @@ class MQTTReceiver:
     """
 
     
-    TEMP_MESSAGE_KEYS = ["temperature", "resistance", "timestamp"]
+    SAMPLE_TEMP_MESSAGE_KEYS = ["temperature", "resistance", "timestamp"]
     FLOW_MESSAGE_KEYS = ["temperature", "volflow", "massflow", "pressure", "setpoint", "timestamp"]
     PRESSURE_MESSAGE_KEYS = ["timestamp", "pressure"]
+    TEMPERATURE_TOPICS = ['leftlinevacuum','centerlinevacuum','copperheater','rightlinevacuum',
+                          'leftprecursor', 'leftlineair', 'rightlineair', 'rightprecursor']
+    TEMPERATURE_MESSAGE_KEYS = ["loop", "datetime", "temperature", "wsp", "tsp", "power"]
+
 
     def __init__(self, data_queue: Queue) -> None:
         self._queue = data_queue
@@ -127,6 +145,11 @@ class MQTTReceiver:
         client.subscribe("ald/io/state")
         client.message_callback_add('ald/io/state', self._on_valves)
 
+        for topic in self.TEMPERATURE_TOPICS:
+            client.subscribe("ald/temperature/{}".format(topic))
+            client.message_callback_add("ald/temperature/{}".format(topic),
+                                        self._on_temperature)
+
         debug_print("Connected.")
 
     def _on_message(self, client: Client, userdata, message: MQTTMessage) -> None:
@@ -158,9 +181,9 @@ class MQTTReceiver:
         values = json.loads(message.payload.decode())
         debug_print("Message received: {}".format(values))
 
-        temp = values[self.TEMP_MESSAGE_KEYS[0]]
-        resistance = values[self.TEMP_MESSAGE_KEYS[1]]
-        datetime = values[self.TEMP_MESSAGE_KEYS[2]]
+        temp = values[self.SAMPLE_TEMP_MESSAGE_KEYS[0]]
+        resistance = values[self.SAMPLE_TEMP_MESSAGE_KEYS[1]]
+        datetime = values[self.SAMPLE_TEMP_MESSAGE_KEYS[2]]
 
         self._queue.put(SampleTemperatureMessage(temp, resistance, datetime))
 
@@ -174,10 +197,23 @@ class MQTTReceiver:
             datetime = valve_data["timestamp"]
 
             self._queue.put(ValveMessage(datetime, valve_name, state))
-            
+
+    def _on_temperature(self, client: Client, userdata, message: MQTTMessage) -> None:
+        values = json.loads(message.payload.decode())
+        debug_print("Message received: {}".format(values))
+
+        loop = values[self.TEMPERATURE_MESSAGE_KEYS[0]]
+        datetime = values[self.TEMPERATURE_MESSAGE_KEYS[1]]
+        temperature = values[self.TEMPERATURE_MESSAGE_KEYS[2]]
+        wsp = values[self.TEMPERATURE_MESSAGE_KEYS[3]]
+        tsp = values[self.TEMPERATURE_MESSAGE_KEYS[4]]
+        power = values[self.TEMPERATURE_MESSAGE_KEYS[5]]
+
+        self._queue.put(TemperatureMessage(loop, datetime, temperature,
+                                           wsp, tsp, power))
+
+
         
-
-
 class DatabaseWorker():
     """Move ALD log data items from a queue into an SQL database."""
 
